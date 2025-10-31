@@ -1,44 +1,70 @@
-import express from 'express';
-import type { Request, Response } from 'express';
+import express from "express";
+import type { Request, Response } from "express";
 
-import cors from 'cors';
-import events from 'events';
+import cors from "cors";
+import events from "events";
+
+process.on("uncaughtException", console.error);
+process.on("unhandledRejection", console.error);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 class Message {
-    body: string;
-    constructor(body: string) {
-        this.body = body;
-    }
+  text: string;
+  sender: string;
+  constructor(text: string, sender: string) {
+    this.text = text;
+    this.sender = sender;
+  }
 }
+
+const MAX_CHAT_USERS: number = 100;
+
+const NEW_MESSAGE_EVENT = "newMessage";
 
 //In memory message store
 let messages: Message[] = [];
 let newMessage: Message | null = null;
 
 const emitter = new events.EventEmitter();
+emitter.setMaxListeners(MAX_CHAT_USERS);
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:3000", // адрес фронтенда
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Authorization", "Content-Type"],
+  })
+);
 app.use(express.json());
 
 //Routes
-app.get('/get-messages', (req: Request, res: Response) => {
-    console.log('Client subscribed for new messages');
-    emitter.once('newMessage', () => {
-        console.log('Sending new message to client, ', newMessage?.body);
-        res.json({ message: newMessage?.body });
-    });
-}); 
+app.get("/get-messages", (req: Request, res: Response) => {
+  res.json({ messages: messages.map((msg) => msg.text) });
+});
 
-app.post('/send-message', (req: Request, res: Response) => {
-    console.log('Received new message from client: ', req.body.message);
-    newMessage = new Message(req.body.message);
-    emitter.emit('newMessage');
-    messages.push(newMessage); 
-    res.status(201).end();
+app.get("/poll-messages", (req: Request, res: Response) => {
+  const handler = () => {
+    clearTimeout(timer);
+    res.json({message : newMessage});
+  };
+
+  emitter.once(NEW_MESSAGE_EVENT, handler);
+  const timer = setTimeout(() => {
+    emitter.removeListener(NEW_MESSAGE_EVENT, handler);
+    res.status(200).json({ error: "Request timeout" });
+    res.end();
+  }, 30000); // 30 seconds timeout
+});
+
+app.post("/send-message", (req: Request, res: Response) => {
+  console.log("Received new message from client: ", req.body.message);
+  newMessage = new Message(req.body.message.text, req.headers.authorization as string);
+  messages.push(newMessage);
+  res.status(201).end();
+  emitter.emit(NEW_MESSAGE_EVENT);
 });
 
 app.listen(PORT, () => {
