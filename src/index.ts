@@ -25,7 +25,6 @@ const NEW_MESSAGE_EVENT = "newMessage";
 
 //In memory message store
 let messages: Message[] = [];
-let newMessage: Message | null = null;
 
 const emitter = new events.EventEmitter();
 emitter.setMaxListeners(MAX_CHAT_USERS);
@@ -41,12 +40,12 @@ app.use(
 app.use(express.json());
 
 //Routes
-app.get("/get-messages", (req: Request, res: Response) => {
-  res.json({ messages: messages.map((msg) => msg.text) });
+app.get("/messages", (req: Request, res: Response) => {
+  res.json({ messages });
 });
 
-app.get("/poll-messages", (req: Request, res: Response) => {
-  const handler = () => {
+app.get("/messages/poll", (req: Request, res: Response) => {
+  const handler = (newMessage: Message) => {
     clearTimeout(timer);
     res.json({message : newMessage});
   };
@@ -54,17 +53,16 @@ app.get("/poll-messages", (req: Request, res: Response) => {
   emitter.once(NEW_MESSAGE_EVENT, handler);
   const timer = setTimeout(() => {
     emitter.removeListener(NEW_MESSAGE_EVENT, handler);
-    res.status(200).json({ error: "Request timeout" });
-    res.end();
+    res.status(204).end(null);
   }, 30000); // 30 seconds timeout
 });
 
-app.post("/send-message", (req: Request, res: Response) => {
+app.post("/message", (req: Request, res: Response) => {
   console.log("Received new message from client: ", req.body.message);
-  newMessage = new Message(req.body.message.text, req.headers.authorization as string);
+  const newMessage = new Message(req.body.message.text, req.headers.authorization as string);
   messages.push(newMessage);
-  res.status(201).end();
-  emitter.emit(NEW_MESSAGE_EVENT);
+  res.status(204).end(null);
+  emitter.emit(NEW_MESSAGE_EVENT, newMessage);
 });
 
 app.listen(PORT, () => {
