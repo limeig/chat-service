@@ -1,14 +1,8 @@
 import type { Request, Response } from "express";
 import events from "events";
 
-class Message {
-  text: string;
-  sender: string;
-  constructor(text: string, sender: string) {
-    this.text = text;
-    this.sender = sender;
-  }
-}
+import { Message } from "./entities.ts";
+
 const MAX_CHAT_USERS: number = 100;
 
 const NEW_MESSAGE_EVENT = "newMessage";
@@ -19,8 +13,13 @@ emitter.setMaxListeners(MAX_CHAT_USERS);
 //In memory message store
 let messages: Message[] = [];
 
+
+interface SendMessageBody {
+  message: Message;
+}
+
 export function getMessagesHandler(req: Request, res: Response) {
-    console.log(`Get ${req.headers.authorization}`);
+  console.log(`Get ${req.headers.authorization}`);
   res.json({ messages });
 }
 
@@ -38,9 +37,9 @@ export function pollMessagesHandler(req: Request, res: Response) {
     }, 30000); // 30 seconds timeout
 }
 
-export function postMessageHandler(req: Request, res: Response) {
+export function postMessageHandler(req: Request<{}, {}, SendMessageBody>, res: Response) {
   console.log("Received new message from client: ", req.body.message);
-  const newMessage = new Message(req.body.message.text, req.headers.authorization as string);
+  const newMessage = new Message(req.body.message);
   messages.push(newMessage);
   res.status(204).end(null);
   emitter.emit(NEW_MESSAGE_EVENT, newMessage);
